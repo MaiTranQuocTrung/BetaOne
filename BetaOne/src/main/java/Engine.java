@@ -28,7 +28,7 @@ public class Engine {
         // searching loop
         while (numberOfIterations <= maxItr ){
             if (debug){System.out.println("Current itr: " + numberOfIterations);}
-            searchMCT(board,40, debug);
+            searchMCT(board, debug);
             numberOfIterations++;
             Instant end = Instant.now();
             if (Duration.between(start, end).toMillis() >= searchTime){
@@ -69,7 +69,7 @@ public class Engine {
     }
 
     // This function does 1 pass of MCTS at a given depth (ply used for verbose)
-    private int searchMCT(Board board, int depth,boolean debug){
+    private int searchMCT(Board board, boolean debug){
         //positional evaluation will be the value of the position
         int positionValue;
         long boardPosition = board.getZobristKey();
@@ -101,12 +101,9 @@ public class Engine {
             if(debug) {System.out.println("In mated case");}
             positionValue = -10000;
         }
-        // Add Q search for parentNumberOfVisits == 0 case
-        // Remove depth == 0?
-        else if(depth == 0 || parentNumberOfVisits == 0){
+
+        else if(parentNumberOfVisits == 0){
             // if the node has never been visited before, update its value and store it in our MCTS history
-            // Note here I have a fixed depth where if it is reached we have to terminate search,
-            // this is purely because computation + not good enough eval, so depth will be really high at something like 40, but this works without capped depth
             positionValue = evaluation.positionalEvaluation(board);
         }
         // main MCTS algorithm
@@ -155,7 +152,7 @@ public class Engine {
             }
             // recursively calculate the position based on the move selected through argmax A of UCB
             board.doMove(moveToExplore);
-            positionValue = -searchMCT(board,depth - 1, debug);
+            positionValue = -searchMCT(board, debug);
             board.undoMove();
         }
         // store the stuff back into MCTS history
