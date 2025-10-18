@@ -8,15 +8,16 @@ import java.time.Instant;
 
 public class Engine {
     // create a hashmap to store MCTS node information (in the future maybe build a custom TT)
-    private final HashMap<Long, Pair<Integer, Integer>> mctsHistory = new HashMap<>();
+    private final HashMap<Pair<Long, Boolean>, Pair<Integer, Integer>> mctsHistory = new HashMap<>();
     // Evaluation class
     private final Evaluation evaluation = new Evaluation();
     // Helper class
     private final Helper helper = new Helper();
+    //stats
+    private int ROLLOUT_COUNT = 0;
 
     public Move Search(Board board, long searchTime, boolean debug, boolean verbose){
 
-        int maxItr = 9999999;
         double mostNumberOfVisit = Double.MIN_VALUE;
         int positionValue = 0;
         int numberOfIterations = 1;
@@ -26,9 +27,9 @@ public class Engine {
         Instant start = Instant.now();
 
         // searching loop
-        while (numberOfIterations <= maxItr ){
+        while (true){
             if (debug){System.out.println("Current itr: " + numberOfIterations);}
-            searchMCT(board, debug);
+            searchMCT(board, 0, debug);
             numberOfIterations++;
             Instant end = Instant.now();
             if (Duration.between(start, end).toMillis() >= searchTime){
@@ -44,16 +45,17 @@ public class Engine {
                 continue;
             }
             long key = board.getZobristKey();
+            boolean repetition = board.isRepetition();
             board.undoMove();
 
-            if(mctsHistory.containsKey(key)){
-                Pair<Integer, Integer> stats = mctsHistory.get(key);
+            if(mctsHistory.containsKey(Pair.of(key,repetition))){
+                Pair<Integer, Integer> stats = mctsHistory.get(Pair.of(key,repetition));
                 visits = stats.getLeft();
                 positionValue = stats.getRight();
 
             }
             else{
-                visits = 1;
+                visits = 0;
             }
 
             double numberOfVisit = visits;
@@ -62,14 +64,15 @@ public class Engine {
                 bestMove = action;
             }
 
-            //if(verbose){System.out.println("Move:" + action + " Value: " + numberOfVisit);}
+            if(verbose){System.out.println("Move:" + action + " Value: " + numberOfVisit);}
         }
-        if(verbose){System.out.println("Move found: " + bestMove + " State Value: " + positionValue/mostNumberOfVisit + " Number of Iteration: " + numberOfIterations);}
+        if(verbose){System.out.println("|Move found: " + bestMove + "|State Value: " + positionValue/mostNumberOfVisit + "|Number of Iteration: " + numberOfIterations + "|Rollout Count: " + ROLLOUT_COUNT + "|");}
+        ROLLOUT_COUNT = 0;
         return bestMove;
     }
 
     // This function does 1 pass of MCTS at a given depth (ply used for verbose)
-    private int searchMCT(Board board, boolean debug){
+    private int searchMCT(Board board, int ply, boolean debug){
         //positional evaluation will be the value of the position
         int positionValue;
         long boardPosition = board.getZobristKey();
@@ -79,15 +82,15 @@ public class Engine {
         // Initialize MCTS history, if it exists then extract information, this will be our parent node
         int parentNumberOfVisits;
         int parentSumValue;
-        if(mctsHistory.containsKey(boardPosition)){
-            Pair<Integer, Integer> mctsHistValue = mctsHistory.get(boardPosition);
+        if(mctsHistory.containsKey(Pair.of(boardPosition,board.isRepetition()))){
+            Pair<Integer, Integer> mctsHistValue = mctsHistory.get(Pair.of(boardPosition,board.isRepetition()));
             parentNumberOfVisits = mctsHistValue.getLeft();
             parentSumValue = mctsHistValue.getRight();
         }
         else{
             // Fill with empty values
             Pair<Integer,Integer> node = Pair.of(0,0);
-            mctsHistory.put(boardPosition, node);
+            mctsHistory.put(Pair.of(boardPosition,board.isRepetition()), node);
             parentNumberOfVisits = 0;
             parentSumValue = 0;
         }
@@ -96,18 +99,20 @@ public class Engine {
         if (board.isDraw()) {
             if(debug){System.out.println("In draw case");}
             positionValue = 0;
+            ROLLOUT_COUNT++;
         }
         else if (board.isMated()){
-            if(debug) {System.out.println("In mated case");}
-            positionValue = -10000;
+            //System.out.println("In mated case");
+            positionValue = -10000 + ply;
+            ROLLOUT_COUNT++;
         }
-
         else if(parentNumberOfVisits == 0){
             // if the node has never been visited before, update its value and store it in our MCTS history
             positionValue = evaluation.positionalEvaluation(board);
         }
         // main MCTS algorithm
         else{
+            // This is selection
             List<Move> actions = board.pseudoLegalMoves();
             // calculate the value of each board state by applying UCB
             for (Move action : actions){
@@ -119,27 +124,25 @@ public class Engine {
                 int childNumberOfVisits;
                 int childSumValue;
 
-                if(mctsHistory.containsKey(childPosition)){
-                    Pair<Integer, Integer> mctsHistValue = mctsHistory.get(childPosition);
+                if(mctsHistory.containsKey(Pair.of(childPosition,board.isRepetition()))){
+                    Pair<Integer, Integer> mctsHistValue = mctsHistory.get(Pair.of(childPosition,board.isRepetition()));
                     childNumberOfVisits = mctsHistValue.getLeft();
                     childSumValue = mctsHistValue.getRight();
                 }
                 // if we haven't seen this node before
                 else{
-                    childNumberOfVisits = 1;
-                    /*
-                    if we haven't seen this node before assume its value to be similar to its parent, in other words
-                    Q(s) child ≈ Q(s) parent, not that this will make it so that UCB values good heuristic and converges on an optimal
-                    heuristic value rather than global optimality. I think this is fine because the global optimally in chess is unknown and
-                    trying to do a fresh UCB is a waste of limited time.
-                     */
-                    childSumValue = -parentSumValue/parentNumberOfVisits;
+                    childNumberOfVisits = 0;
+                    childSumValue = 0;
                 }
                 board.undoMove();
-                // calculate UCB
-                double averageValue = (double) childSumValue /childNumberOfVisits;
-                double explorationTerm = (double) 100 * Math.sqrt(Math.log(parentNumberOfVisits) / childNumberOfVisits);
-                double ucb = explorationTerm - averageValue;
+
+                double ucb;
+                if (childNumberOfVisits == 0) {
+                    ucb = Double.MAX_VALUE;
+                } else {
+                    ucb = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 1000);
+                }
+
 
                 if(debug){System.out.println("UCB value: " + ucb);}
 
@@ -151,14 +154,15 @@ public class Engine {
                 if(debug){System.out.println("Move to explore: " + moveToExplore);}
             }
             // recursively calculate the position based on the move selected through argmax A of UCB
+            // this is expansion
             board.doMove(moveToExplore);
-            positionValue = -searchMCT(board, debug);
+            positionValue = -searchMCT(board, ply + 1, debug);
             board.undoMove();
         }
         // store the stuff back into MCTS history
         // the evaluation is the parent evaluation + the leaf node evaluation
         // we will use the evaluation to calculate Q(s) which is simply evaluation / # the node has been visited
-        mctsHistory.put(boardPosition,Pair.of(parentNumberOfVisits + 1,parentSumValue + positionValue));
+        mctsHistory.put(Pair.of(boardPosition,board.isRepetition()),Pair.of(parentNumberOfVisits + 1,parentSumValue + positionValue));
 
         if(debug){System.out.println("MCTS Eval: " + positionValue);}
 

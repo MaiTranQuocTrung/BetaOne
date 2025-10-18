@@ -1,31 +1,28 @@
-import com.github.bhlangonijr.chesslib.*;
-import com.github.bhlangonijr.chesslib.move.Move;
-import java.util.ArrayList;
-import java.util.List;
-
 public class Helper {
-    Evaluation evaluation = new Evaluation();
-
-    // Is the move a capture move
-    public boolean isCapture(Board board, Move move){
-        Square origin = move.getFrom();
-        // What is the square the piece is moving to
-        Square destination = move.getTo();
-        // get piece at destination square
-        Piece destinationPiece = board.getPiece(destination);
-        // get piece at origin
-        Piece originPiece = board.getPiece(origin);
-        // If there is nothing at that destination square
-        return originPiece != Piece.NONE && destinationPiece != Piece.NONE && destinationPiece.getPieceSide() != originPiece.getPieceSide();
+    /*
+     calculate UCB:
+        Q(s,a) = value of node / number of time node has been visited [notice this is the same as MAB]
+        Constant to handle exploitation importance
+        Exploration term = sqrt(log(number of times parent node visited) / number of time current node visited)
+    */
+    public double UCB(int childSumValue, int childNumberOfVisits, int parentNumberOfVisits, int constant){
+        double q_value = (double) childSumValue / childNumberOfVisits;
+        double exploitationTerm = (double) constant * Math.sqrt(Math.log(parentNumberOfVisits) / childNumberOfVisits);
+        return exploitationTerm - q_value;
     }
 
-    public List<Move> captureMoveList(Board board, List<Move> moveList){
-        List<Move> captureMove = new ArrayList<>();
-        for (Move action : moveList){
-            if(isCapture(board, action)){
-                captureMove.add(action);
-            }
-        }
-        return captureMove;
+     /*
+     calculate PUCB:
+        Q(s,a) = value of node / number of time node has been visited [notice this is the same as MAB]
+        Constant PUCB: affect importance of P(s,a)
+        P(s'|s,a) = probability of transitioning to state s'
+        Exploration term = c_pucb * p(s'|s,a) * log(number of times parent node visited / number of time current node visited)
+    */
+
+    public double PUCB(int childSumValue, int childNumberOfVisits, int parentNumberOfVisits, int constant_pucb, int probability_transition){
+        double q_value = (double) childSumValue / childNumberOfVisits;
+        double exploitationTerm = (double) constant_pucb * probability_transition * (Math.log(parentNumberOfVisits) / childNumberOfVisits);
+        return exploitationTerm - q_value;
     }
+
 }
