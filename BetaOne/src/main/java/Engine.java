@@ -97,12 +97,10 @@ public class Engine {
 
         // Termination conditions
         if (board.isDraw()) {
-            if(debug){System.out.println("In draw case");}
             positionValue = 0;
             ROLLOUT_COUNT++;
         }
         else if (board.isMated()){
-            //System.out.println("In mated case");
             positionValue = -10000 + ply;
             ROLLOUT_COUNT++;
         }
@@ -140,7 +138,7 @@ public class Engine {
                 if (childNumberOfVisits == 0) {
                     ucb = Double.MAX_VALUE;
                 } else {
-                    ucb = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 1000);
+                    ucb = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 400);
                 }
 
 
