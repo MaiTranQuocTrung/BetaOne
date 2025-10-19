@@ -17,7 +17,6 @@ public class Engine {
     private int ROLLOUT_COUNT = 0;
 
     public Move Search(Board board, long searchTime, boolean debug, boolean verbose){
-
         double mostNumberOfVisit = Double.MIN_VALUE;
         int positionValue = 0;
         int numberOfIterations = 1;
@@ -66,12 +65,12 @@ public class Engine {
 
             if(verbose){System.out.println("Move:" + action + " Value: " + numberOfVisit);}
         }
-        if(verbose){System.out.println("|Move found: " + bestMove + "|State Value: " + positionValue/mostNumberOfVisit + "|Number of Iteration: " + numberOfIterations + "|Rollout Count: " + ROLLOUT_COUNT + "|");}
+        if(verbose){System.out.println("|Move found: " + bestMove + "|State Value: " + positionValue + "|Number of Iteration: " + numberOfIterations + "|Rollout Count: " + ROLLOUT_COUNT + "|");}
         ROLLOUT_COUNT = 0;
         return bestMove;
     }
 
-    // This function does 1 pass of MCTS at a given depth (ply used for verbose)
+    // This function does 1 pass of MCTS
     private int searchMCT(Board board, int ply, boolean debug){
         //positional evaluation will be the value of the position
         int positionValue;
@@ -96,7 +95,7 @@ public class Engine {
         }
 
         // Termination conditions
-        if (board.isDraw()) {
+        if (board.isRepetition() || board.isInsufficientMaterial()) {
             positionValue = 0;
             ROLLOUT_COUNT++;
         }
@@ -104,8 +103,9 @@ public class Engine {
             positionValue = -10000 + ply;
             ROLLOUT_COUNT++;
         }
+        // Bootstrap node values
         else if(parentNumberOfVisits == 0){
-            // if the node has never been visited before, update its value and store it in our MCTS history
+            // If the node has never been visited before, update its value and store it in our MCTS history
             positionValue = evaluation.positionalEvaluation(board);
         }
         // main MCTS algorithm
@@ -134,6 +134,9 @@ public class Engine {
                 }
                 board.undoMove();
 
+                // calculate P(s,a)
+
+
                 double ucb;
                 if (childNumberOfVisits == 0) {
                     ucb = Double.MAX_VALUE;
@@ -161,8 +164,6 @@ public class Engine {
         // the evaluation is the parent evaluation + the leaf node evaluation
         // we will use the evaluation to calculate Q(s) which is simply evaluation / # the node has been visited
         mctsHistory.put(Pair.of(boardPosition,board.isRepetition()),Pair.of(parentNumberOfVisits + 1,parentSumValue + positionValue));
-
-        if(debug){System.out.println("MCTS Eval: " + positionValue);}
 
         return positionValue;
     }
