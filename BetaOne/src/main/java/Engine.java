@@ -17,7 +17,7 @@ public class Engine {
     private int ROLLOUT_COUNT = 0;
 
     public Move Search(Board board, long searchTime, boolean debug, boolean verbose){
-        double mostNumberOfVisit = Double.MIN_VALUE;
+        int mostNumberOfVisit = Integer.MIN_VALUE;
         int positionValue = 0;
         int numberOfIterations = 1;
         Move bestMove = null;
@@ -57,15 +57,22 @@ public class Engine {
                 visits = 0;
             }
 
-            double numberOfVisit = visits;
+            int numberOfVisit = visits;
             if (numberOfVisit > mostNumberOfVisit) {
                 mostNumberOfVisit = numberOfVisit;
                 bestMove = action;
             }
 
-            if(verbose){System.out.println("Move:" + action + " Value: " + numberOfVisit);}
+            if(verbose){System.out.println("|Move:" + action + " |Number of Visits: " + numberOfVisit + "|");}
         }
-        if(verbose){System.out.println("|Move found: " + bestMove + "|State Value: " + positionValue + "|Number of Iteration: " + numberOfIterations + "|Rollout Count: " + ROLLOUT_COUNT + "|");}
+
+        if (verbose) {
+            System.out.printf(
+                    "Move Found: %-10s | Value: %-6d | Iterations: %-6d | Rollouts: %-6d%n",
+                    bestMove, positionValue, numberOfIterations, ROLLOUT_COUNT
+            );
+        }
+
         ROLLOUT_COUNT = 0;
         return bestMove;
     }
@@ -134,21 +141,19 @@ public class Engine {
                 }
                 board.undoMove();
 
-                // calculate P(s,a)
-
-
-                double ucb;
+                double confidenceValue;
+                // force exploration of unvisited nodes, this is safer in terms of mate finding
                 if (childNumberOfVisits == 0) {
-                    ucb = Double.MAX_VALUE;
-                } else {
-                    ucb = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 400);
+                    confidenceValue = Double.MAX_VALUE;
+                }
+                else {
+                    confidenceValue = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 400);
                 }
 
+                if(debug){System.out.println("UCB value: " + confidenceValue);}
 
-                if(debug){System.out.println("UCB value: " + ucb);}
-
-                if (ucb > bestUcb){
-                    bestUcb = ucb;
+                if (confidenceValue > bestUcb){
+                    bestUcb = confidenceValue;
                     moveToExplore = action;
                 }
 
@@ -157,7 +162,7 @@ public class Engine {
             // recursively calculate the position based on the move selected through argmax A of UCB
             // this is expansion
             board.doMove(moveToExplore);
-            positionValue = -searchMCT(board, ply + 1, debug);
+            positionValue = -searchMCT(board, ply + 1, debug); // This is a bit confusing but positionValue = child value
             board.undoMove();
         }
         // store the stuff back into MCTS history
