@@ -9,6 +9,8 @@ import java.time.Instant;
 public class Engine {
     // create a hashmap to store MCTS node information (in the future maybe build a custom TT)
     private final HashMap<Pair<Long, Boolean>, Pair<Integer, Integer>> mctsHistory = new HashMap<>();
+    // create a hashmap to store heuristic estimation (from research paper of Q^im)
+    private final HashMap<Pair<Long, Boolean>, Integer> heuristicEstimate = new HashMap<>();
     // Evaluation class
     private final Evaluation evaluation = new Evaluation();
     // Helper class
@@ -25,9 +27,12 @@ public class Engine {
         // timer settings
         Instant start = Instant.now();
 
-        // searching loop
+        // "training loop"
         while (true){
-            if (debug){System.out.println("Current itr: " + numberOfIterations);}
+            if (verbose) {
+                System.out.print("\rCurrent itr: " + numberOfIterations + " Rollout: " + ROLLOUT_COUNT);
+                System.out.flush();
+            }
             searchMCT(board, 0, debug);
             numberOfIterations++;
             Instant end = Instant.now();
@@ -68,8 +73,8 @@ public class Engine {
 
         if (verbose) {
             System.out.printf(
-                    "Move Found: %-10s | Value: %-6d | Iterations: %-6d | Rollouts: %-6d%n",
-                    bestMove, positionValue, numberOfIterations, ROLLOUT_COUNT
+                    "Move Found: %-10s | Value: %-10.3f | Iterations: %-6d | Rollouts: %-6d%n",
+                    bestMove, (double) positionValue / mostNumberOfVisit, numberOfIterations, ROLLOUT_COUNT
             );
         }
 
@@ -80,7 +85,7 @@ public class Engine {
     // This function does 1 pass of MCTS
     private int searchMCT(Board board, int ply, boolean debug){
         //positional evaluation will be the value of the position
-        int positionValue;
+        int childPositionValue;
         long boardPosition = board.getZobristKey();
         double bestUcb = -Double.MAX_VALUE;
         Move moveToExplore = null;
@@ -103,17 +108,18 @@ public class Engine {
 
         // Termination conditions
         if (board.isRepetition() || board.isInsufficientMaterial()) {
-            positionValue = 0;
+            childPositionValue = 0;
             ROLLOUT_COUNT++;
         }
         else if (board.isMated()){
-            positionValue = -10000 + ply;
+            childPositionValue = -10000 + ply;
             ROLLOUT_COUNT++;
         }
+
         // Bootstrap node values
         else if(parentNumberOfVisits == 0){
             // If the node has never been visited before, update its value and store it in our MCTS history
-            positionValue = evaluation.positionalEvaluation(board);
+            childPositionValue = evaluation.positionalEvaluation(board);
         }
         // main MCTS algorithm
         else{
@@ -124,13 +130,24 @@ public class Engine {
                 if (!board.doMove(action)){
                     continue;
                 }
+
                 // extract information from mcts of the node
                 long childPosition = board.getZobristKey();
                 int childNumberOfVisits;
                 int childSumValue;
+                boolean isRepetition = board.isRepetition();
 
-                if(mctsHistory.containsKey(Pair.of(childPosition,board.isRepetition()))){
-                    Pair<Integer, Integer> mctsHistValue = mctsHistory.get(Pair.of(childPosition,board.isRepetition()));
+                // get heuristic position
+                int heuristicEval;
+                if (heuristicEstimate.containsKey(Pair.of(childPosition, isRepetition))){
+                    heuristicEval = evaluation.positionalEvaluation(board);
+                }
+                else {
+                    heuristicEval = evaluation.positionalEvaluation(board);
+                }
+
+                if(mctsHistory.containsKey(Pair.of(childPosition,isRepetition))){
+                    Pair<Integer, Integer> mctsHistValue = mctsHistory.get(Pair.of(childPosition,isRepetition));
                     childNumberOfVisits = mctsHistValue.getLeft();
                     childSumValue = mctsHistValue.getRight();
                 }
@@ -141,13 +158,17 @@ public class Engine {
                 }
                 board.undoMove();
 
+                double alpha = 0.4;
+                // child q value
+                double child_q_value =  (1 - alpha) * ((double) childSumValue /childNumberOfVisits) + alpha * heuristicEval;
+
                 double confidenceValue;
                 // force exploration of unvisited nodes, this is safer in terms of mate finding
                 if (childNumberOfVisits == 0) {
                     confidenceValue = Double.MAX_VALUE;
                 }
                 else {
-                    confidenceValue = helper.UCB(childSumValue, childNumberOfVisits, parentNumberOfVisits, 400);
+                    confidenceValue = helper.UCB(child_q_value, childNumberOfVisits, parentNumberOfVisits, 400);
                 }
 
                 if(debug){System.out.println("UCB value: " + confidenceValue);}
@@ -160,16 +181,15 @@ public class Engine {
                 if(debug){System.out.println("Move to explore: " + moveToExplore);}
             }
             // recursively calculate the position based on the move selected through argmax A of UCB
-            // this is expansion
             board.doMove(moveToExplore);
-            positionValue = -searchMCT(board, ply + 1, debug); // This is a bit confusing but positionValue = child value
+            childPositionValue = -searchMCT(board, ply + 1, debug);
             board.undoMove();
         }
         // store the stuff back into MCTS history
         // the evaluation is the parent evaluation + the leaf node evaluation
         // we will use the evaluation to calculate Q(s) which is simply evaluation / # the node has been visited
-        mctsHistory.put(Pair.of(boardPosition,board.isRepetition()),Pair.of(parentNumberOfVisits + 1,parentSumValue + positionValue));
+        mctsHistory.put(Pair.of(boardPosition,board.isRepetition()),Pair.of(parentNumberOfVisits + 1,parentSumValue + childPositionValue));
 
-        return positionValue;
+        return childPositionValue;
     }
 }
