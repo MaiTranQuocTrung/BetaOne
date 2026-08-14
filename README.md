@@ -1,6 +1,4 @@
-Reinforcement Learning Project
-
-V0:
+MCTS engine with PUCT:
 - Fixed depth 40 for safety
 - Classic handcrafted evaluation
 - Assume Q child approx Q parent for never visited child
